@@ -53,7 +53,14 @@ def patch_plant(session: Session, plant_id: int, payload: PlantUpdate) -> Plant:
     if not db_plant:
         raise HTTPException(status_code=404, detail="Plant not found")
 
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+
+    # Watering a plant that needs attention resets health to healthy
+    if "last_watered" in updates and db_plant.health_status in ("needs_attention", "critical"):
+        if "health_status" not in updates:
+            updates["health_status"] = "healthy"
+
+    for key, value in updates.items():
         setattr(db_plant, key, value)
 
     session.add(db_plant)

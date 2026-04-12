@@ -81,6 +81,27 @@ def test_create_plant_invalid_type(client):
     assert resp.status_code == 422
 
 
+def test_watering_resets_health_to_healthy(client):
+    plant_id = client.post(
+        "/plants/", json={**SAMPLE, "health_status": "needs_attention"}
+    ).json()["id"]
+    resp = client.patch(f"/plants/{plant_id}", json={"last_watered": "2026-04-12"})
+    assert resp.status_code == 200
+    assert resp.json()["health_status"] == "healthy"
+
+
+def test_watering_keeps_explicit_health_override(client):
+    plant_id = client.post(
+        "/plants/", json={**SAMPLE, "health_status": "critical"}
+    ).json()["id"]
+    resp = client.patch(
+        f"/plants/{plant_id}",
+        json={"last_watered": "2026-04-12", "health_status": "needs_attention"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["health_status"] == "needs_attention"
+
+
 def test_create_then_list_persistence(client):
     client.post("/plants/", json=SAMPLE)
     client.post("/plants/", json={**SAMPLE, "name": "Pothos", "species": "Epipremnum aureum"})
