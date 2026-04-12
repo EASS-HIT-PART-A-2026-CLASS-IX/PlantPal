@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import create_db_and_tables
-from app.routers import plants
+from app.routers import care_events, plants
 
 
 @asynccontextmanager
@@ -24,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(plants.router)
+app.include_router(care_events.router)
 
 
 @app.get("/health", tags=["health"])

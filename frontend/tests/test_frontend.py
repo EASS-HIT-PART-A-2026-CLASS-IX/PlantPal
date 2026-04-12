@@ -71,3 +71,70 @@ def test_overdue_metric_calculation():
 
     assert not is_overdue(plant_ok)
     assert is_overdue(plant_overdue)
+
+
+def test_get_care_events_returns_list():
+    """get_care_events should return a list from the API."""
+    sample_event = {
+        "id": 1,
+        "plant_id": 1,
+        "event_type": "watered",
+        "detail": "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "plant_name": "Monstera",
+    }
+
+    with patch("plant_api.requests.get") as mock_get:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = [sample_event]
+
+        events = plant_api.get_care_events(plant_id=1)
+        assert len(events) == 1
+        assert events[0]["event_type"] == "watered"
+
+
+def test_get_care_events_backend_unreachable():
+    """When the backend is down, get_care_events should return an empty list."""
+    import requests as req
+
+    with patch("plant_api.requests.get", side_effect=req.ConnectionError):
+        events = plant_api.get_care_events()
+        assert events == []
+
+
+def test_create_care_event():
+    """create_care_event should POST and return the created event."""
+    created = {
+        "id": 5,
+        "plant_id": 1,
+        "event_type": "note",
+        "detail": "Repotted",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "plant_name": "Monstera",
+    }
+
+    with patch("plant_api.requests.post") as mock_post:
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = created
+        mock_post.return_value.raise_for_status = lambda: None
+
+        result = plant_api.create_care_event(
+            {"plant_id": 1, "event_type": "note", "detail": "Repotted"}
+        )
+        assert result["id"] == 5
+        assert result["detail"] == "Repotted"
+
+
+def test_healthcheck_returns_true():
+    """healthcheck should return True when backend responds 200."""
+    with patch("plant_api.requests.get") as mock_get:
+        mock_get.return_value.status_code = 200
+        assert plant_api.healthcheck() is True
+
+
+def test_healthcheck_returns_false_on_error():
+    """healthcheck should return False when backend is unreachable."""
+    import requests as req
+
+    with patch("plant_api.requests.get", side_effect=req.ConnectionError):
+        assert plant_api.healthcheck() is False

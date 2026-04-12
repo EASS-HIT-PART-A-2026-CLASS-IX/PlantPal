@@ -66,6 +66,11 @@ def test_update_plant_not_found(client):
     assert resp.status_code == 404
 
 
+def test_patch_plant_not_found(client):
+    resp = client.patch("/plants/999", json={"notes": "gone"})
+    assert resp.status_code == 404
+
+
 def test_delete_plant_not_found(client):
     resp = client.delete("/plants/999")
     assert resp.status_code == 404
@@ -136,6 +141,22 @@ def test_overdue_degrades_to_critical(client):
     assert resp.json()["health_status"] == "critical"
 
 
+def test_list_plants_pagination(client):
+    """skip and limit query params control which plants are returned."""
+    client.post("/plants/", json=SAMPLE)
+    client.post("/plants/", json={**SAMPLE, "name": "Pothos", "species": "Epipremnum aureum"})
+    client.post("/plants/", json={**SAMPLE, "name": "Fern", "species": "Nephrolepis"})
+
+    all_plants = client.get("/plants/").json()
+    assert len(all_plants) == 3
+
+    limited = client.get("/plants/", params={"limit": 2}).json()
+    assert len(limited) == 2
+
+    skipped = client.get("/plants/", params={"skip": 2}).json()
+    assert len(skipped) == 1
+
+
 def test_create_then_list_persistence(client):
     client.post("/plants/", json=SAMPLE)
     client.post("/plants/", json={**SAMPLE, "name": "Pothos", "species": "Epipremnum aureum"})
@@ -143,3 +164,32 @@ def test_create_then_list_persistence(client):
     assert len(plants) == 2
     names = {p["name"] for p in plants}
     assert names == {"Monstera", "Pothos"}
+
+
+def test_watering_logs_care_event(client):
+    """PATCHing last_watered should auto-create a 'watered' CareEvent."""
+    plant_id = client.post("/plants/", json=SAMPLE).json()["id"]
+    client.patch(
+        f"/plants/{plant_id}",
+        json={"last_watered": "2026-04-12T12:00:00+00:00"},
+    )
+    events = client.get("/care-events/", params={"plant_id": plant_id}).json()
+    watered = [e for e in events if e["event_type"] == "watered"]
+    assert len(watered) == 1
+    assert watered[0]["plant_id"] == plant_id
+
+
+def test_health_degradation_logs_care_event(client):
+    """Reading an overdue plant should auto-create a 'health_changed' CareEvent."""
+    from datetime import datetime, timedelta, timezone
+
+    past = (datetime.now(timezone.utc) - timedelta(hours=300)).isoformat()
+    plant_id = client.post(
+        "/plants/",
+        json={**SAMPLE, "last_watered": past, "water_frequency_hours": 168},
+    ).json()["id"]
+    client.get(f"/plants/{plant_id}")
+    events = client.get("/care-events/", params={"plant_id": plant_id}).json()
+    health_events = [e for e in events if e["event_type"] == "health_changed"]
+    assert len(health_events) >= 1
+    assert "critical" in health_events[0]["detail"]

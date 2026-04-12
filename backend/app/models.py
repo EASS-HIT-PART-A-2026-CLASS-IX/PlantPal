@@ -35,3 +35,30 @@ class PlantUpdate(SQLModel):
     health_status: str | None = None
     image_url: str | None = None
     notes: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Care Events
+# ---------------------------------------------------------------------------
+
+class CareEvent(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    plant_id: int = Field(foreign_key="plant.id", index=True)
+    event_type: str  # "watered", "health_changed", "note"
+    detail: str = ""
+    created_at: str = ""
+
+
+class CareEventCreate(SQLModel):
+    plant_id: int
+    event_type: str = "note"
+    detail: str = ""
+
+
+class CareEventRead(SQLModel):
+    id: int
+    plant_id: int
+    event_type: str
+    detail: str
+    created_at: str
+    plant_name: str | None = None

@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlmodel import Session, select
 
 from app.models import Plant, PlantCreate, PlantUpdate
+from app.services.care_events import log_event
 
 
 def _hours_since_watered(plant: Plant) -> float | None:
@@ -41,8 +42,15 @@ def _refresh_health(session: Session, plant: Plant) -> Plant:
     new_severity = _SEVERITY.get(new_status, 0)
 
     if new_severity > current_severity:
+        old_status = plant.health_status
         plant.health_status = new_status
         session.add(plant)
+        log_event(
+            session,
+            plant_id=plant.id,
+            event_type="health_changed",
+            detail=f"{old_status} -> {new_status}",
+        )
         session.commit()
         session.refresh(plant)
 
@@ -99,8 +107,9 @@ def patch_plant(session: Session, plant_id: int, payload: PlantUpdate) -> Plant:
 
     updates = payload.model_dump(exclude_unset=True)
 
-    # Watering a plant that needs attention resets health to healthy
-    if "last_watered" in updates and db_plant.health_status in ("needs_attention", "critical"):
+    watering = "last_watered" in updates
+
+    if watering and db_plant.health_status in ("needs_attention", "critical"):
         if "health_status" not in updates:
             updates["health_status"] = "healthy"
 
@@ -108,6 +117,10 @@ def patch_plant(session: Session, plant_id: int, payload: PlantUpdate) -> Plant:
         setattr(db_plant, key, value)
 
     session.add(db_plant)
+
+    if watering:
+        log_event(session, plant_id=db_plant.id, event_type="watered")
+
     session.commit()
     session.refresh(db_plant)
     return db_plant

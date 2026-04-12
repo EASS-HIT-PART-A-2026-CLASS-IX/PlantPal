@@ -6,18 +6,29 @@ A monorepo for the EASS course (EX1 + EX2). PlantPal helps you manage your house
 
 ```
 EASS-HIT/
-├── backend/          # EX1 – FastAPI backend
-│   ├── app/          # Application code (models, routes, services, DB)
-│   ├── tests/        # pytest test suite (15 tests)
-│   ├── seed.py       # Sample data loader
-│   └── README.md     # Backend-specific docs
-├── frontend/          # EX2 – Streamlit dashboard
-│   ├── plantpal_ui.py # Main entry point
-│   ├── plant_api.py   # HTTP client for the backend
-│   ├── cached_api.py  # Cached data layer
-│   ├── pages/         # Additional views (Care Log)
-│   └── tests/         # Frontend workflow tests
-├── .env.example      # Environment variable template
+├── backend/                        # EX1 – FastAPI backend
+│   ├── app/
+│   │   ├── models.py               # Plant + CareEvent data models
+│   │   ├── routers/
+│   │   │   ├── plants.py           # /plants CRUD endpoints
+│   │   │   └── care_events.py      # /care-events endpoints
+│   │   ├── services/
+│   │   │   ├── plants.py           # Plant business logic + auto-logging
+│   │   │   └── care_events.py      # Care event queries + creation
+│   │   └── db.py                   # SQLite / SQLModel setup
+│   ├── tests/                      # pytest test suite (31 tests)
+│   │   ├── test_plants.py          # Plant CRUD + auto-logging tests
+│   │   ├── test_care_events.py     # Care event endpoint tests
+│   │   └── test_smoke.py           # Health / docs smoke tests
+│   ├── seed.py                     # Sample data loader
+│   └── README.md                   # Backend-specific docs
+├── frontend/                       # EX2 – Streamlit dashboard
+│   ├── plantpal_ui.py              # Main entry point
+│   ├── plant_api.py                # HTTP client for the backend
+│   ├── cached_api.py               # Cached data layer
+│   ├── care_log.py                 # Care Log page (timeline + insights)
+│   └── tests/                      # Frontend workflow tests
+├── .env.example                    # Environment variable template
 └── .gitignore
 ```
 
@@ -43,7 +54,10 @@ uv run python seed.py
 Run tests:
 
 ```bash
-uv run pytest -v
+uv run pytest -v                          # all backend tests (31)
+uv run pytest tests/test_plants.py -v     # plant CRUD + auto-logging only
+uv run pytest tests/test_care_events.py -v  # care events API only
+uv run pytest tests/test_smoke.py -v      # health / docs smoke only
 ```
 
 ### 2. Frontend (EX2)
@@ -68,24 +82,37 @@ Set `API_URL` if the backend runs on a different host:
 API_URL=http://some-host:8000 streamlit run plantpal_ui.py
 ```
 
+Run frontend tests (no running backend needed — uses mocks):
+
+```bash
+cd frontend
+python3 -m pytest tests/ -v              # all frontend tests (8)
+```
+
 ## Features
 
 ### Backend (EX1)
 
 - Full CRUD for plants (`POST`, `GET`, `PUT`, `PATCH`, `DELETE`)
+- **Care Events API** (`GET /care-events/`, `POST /care-events/`) — filterable by plant and event type
+- **Auto-logging**: watering a plant or health degradation automatically creates timestamped care events
 - SQLite persistence via SQLModel
 - Health check endpoint (`/health`)
 - CORS middleware for frontend integration
-- 15 pytest tests (happy-path + error-path + validation)
+- 31 pytest tests (happy-path + error-path + validation + pagination + auto-logging + care events CRUD)
 - Seed script with 6 sample plants
 
 ### Frontend (EX2)
 
 - **Dashboard**: List all plants with health badges, light indicators, and watering status
 - **Add / Edit / Delete**: Full CRUD through dialog forms
-- **Water Now**: One-click watering that updates `last_watered` to today
+- **Water Now**: One-click watering that updates `last_watered` and logs a care event
 - **Overdue Alerts**: Plants past their watering schedule are flagged with warnings
-- **Care Log**: Dedicated page showing watering schedule table and overdue breakdown
+- **Care Log**: Full care history and insights page with:
+  - Summary stats (weekly/monthly activity, care streak, most pampered plant)
+  - Activity timeline with day grouping and filters by plant/event type
+  - Per-plant drilldown with watering count, average interval, and full history
+  - Add care notes (free-text observations attached to any plant)
 - **Search & Filter**: Filter by name, location, health status, or light need
 - **Export to JSON**: Download your plant collection as a JSON file
 - Green/nature-themed dark UI
@@ -100,4 +127,4 @@ This project was built with the assistance of an AI coding agent (Claude / Curso
 - Build the Streamlit dashboard layout and styling
 - Draft documentation
 
-All outputs were reviewed and tested locally. Backend tests (15 passing) and frontend workflow tests (3 passing) verify correctness.
+All outputs were reviewed and tested locally. Backend tests (31 passing) and frontend tests (8 passing) verify correctness.
