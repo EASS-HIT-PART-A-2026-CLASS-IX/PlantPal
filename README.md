@@ -49,8 +49,6 @@ mkdir -p data
 uv run uvicorn app.main:app --reload
 ```
 
-Docs: http://localhost:8000/docs
-
 Seed sample data (with the API running):
 
 ```bash
