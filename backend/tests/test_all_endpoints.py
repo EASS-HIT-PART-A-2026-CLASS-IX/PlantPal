@@ -2,6 +2,22 @@
 status codes, response shapes, and core behaviour in a single file.
 
 Run with:  uv run pytest tests/test_all_endpoints.py -v
+
+Classes
+-------
+TestHealth            GET /health               (2 tests)
+TestDocs              GET /docs, /openapi.json   (2 tests)
+TestCreatePlant       POST /plants/              (5 tests)
+TestListPlants        GET /plants/               (5 tests)
+TestGetPlant          GET /plants/{id}           (2 tests)
+TestUpdatePlant       PUT /plants/{id}           (4 tests)
+TestPatchPlant        PATCH /plants/{id}         (7 tests)
+TestDeletePlant       DELETE /plants/{id}        (3 tests)
+TestListCareEvents    GET /care-events/          (6 tests)
+TestCreateCareEvent   POST /care-events/         (6 tests)
+TestHealthDegradation cross-cutting behaviour    (4 tests)
+TestFullLifecycle     end-to-end integration     (1 test)
+TestRootPath          GET / returns 404          (1 test)
 """
 
 from datetime import datetime, timedelta, timezone
@@ -32,6 +48,8 @@ CARE_EVENT_FIELDS = {
 # ── GET /health ──────────────────────────────────────────────────────
 
 class TestHealth:
+    """GET /health — verify the health check endpoint returns the expected JSON."""
+
     def test_returns_200(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
@@ -44,6 +62,8 @@ class TestHealth:
 # ── GET /docs & /openapi.json ───────────────────────────────────────
 
 class TestDocs:
+    """GET /docs and /openapi.json — verify Swagger UI and OpenAPI spec are served."""
+
     def test_swagger_ui(self, client):
         assert client.get("/docs").status_code == 200
 
@@ -63,6 +83,8 @@ class TestDocs:
 # ── POST /plants/ ───────────────────────────────────────────────────
 
 class TestCreatePlant:
+    """POST /plants/ — create a plant and validate response shape and defaults."""
+
     def test_returns_200_with_all_fields(self, client):
         resp = client.post("/plants/", json=PLANT_PAYLOAD)
         assert resp.status_code == 200
@@ -90,6 +112,8 @@ class TestCreatePlant:
 # ── GET /plants/ ────────────────────────────────────────────────────
 
 class TestListPlants:
+    """GET /plants/ — list plants with pagination (skip/limit) support."""
+
     def test_empty_initially(self, client):
         resp = client.get("/plants/")
         assert resp.status_code == 200
@@ -122,6 +146,8 @@ class TestListPlants:
 # ── GET /plants/{id} ───────────────────────────────────────────────
 
 class TestGetPlant:
+    """GET /plants/{id} — fetch a single plant by ID, 404 on missing."""
+
     def test_returns_correct_plant(self, client):
         pid = client.post("/plants/", json=PLANT_PAYLOAD).json()["id"]
         resp = client.get(f"/plants/{pid}")
@@ -136,6 +162,8 @@ class TestGetPlant:
 # ── PUT /plants/{id} ───────────────────────────────────────────────
 
 class TestUpdatePlant:
+    """PUT /plants/{id} — full update, edit event logging, 404 on missing."""
+
     def test_replaces_all_fields(self, client):
         pid = client.post("/plants/", json=PLANT_PAYLOAD).json()["id"]
         updated = {**PLANT_PAYLOAD, "name": "Updated Snake", "location": "Balcony"}
@@ -170,6 +198,8 @@ class TestUpdatePlant:
 # ── PATCH /plants/{id} ─────────────────────────────────────────────
 
 class TestPatchPlant:
+    """PATCH /plants/{id} — partial update, watering auto-heal, event logging."""
+
     def test_partial_update(self, client):
         pid = client.post("/plants/", json=PLANT_PAYLOAD).json()["id"]
         resp = client.patch(f"/plants/{pid}", json={"notes": "New note"})
@@ -230,6 +260,8 @@ class TestPatchPlant:
 # ── DELETE /plants/{id} ─────────────────────────────────────────────
 
 class TestDeletePlant:
+    """DELETE /plants/{id} — remove a plant, verify gone from list and GET."""
+
     def test_deletes_plant(self, client):
         pid = client.post("/plants/", json=PLANT_PAYLOAD).json()["id"]
         resp = client.delete(f"/plants/{pid}")
@@ -249,6 +281,8 @@ class TestDeletePlant:
 # ── GET /care-events/ ──────────────────────────────────────────────
 
 class TestListCareEvents:
+    """GET /care-events/ — list events with plant_id, event_type, and limit filters."""
+
     def test_empty_initially(self, client):
         resp = client.get("/care-events/")
         assert resp.status_code == 200
@@ -310,6 +344,8 @@ class TestListCareEvents:
 # ── POST /care-events/ ─────────────────────────────────────────────
 
 class TestCreateCareEvent:
+    """POST /care-events/ — create events, validate response fields and errors."""
+
     def test_creates_event_with_all_fields(self, client):
         pid = client.post("/plants/", json=PLANT_PAYLOAD).json()["id"]
         resp = client.post(
@@ -368,6 +404,8 @@ class TestCreateCareEvent:
 # ── Health degradation (cross-cutting) ──────────────────────────────
 
 class TestHealthDegradation:
+    """Cross-cutting — auto-degradation of health when a plant is overdue for watering."""
+
     def _overdue_plant(self, client, hours_ago: int):
         past = (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).isoformat()
         return client.post(
@@ -405,6 +443,8 @@ class TestHealthDegradation:
 # ── Full CRUD lifecycle (integration) ───────────────────────────────
 
 class TestFullLifecycle:
+    """End-to-end integration — walk a plant through create, read, update, patch, and delete."""
+
     def test_create_read_update_patch_delete(self, client):
         """Walk through the complete lifecycle of a plant and its events."""
         created = client.post("/plants/", json=PLANT_PAYLOAD).json()
@@ -443,5 +483,7 @@ class TestFullLifecycle:
 # ── Root path (no route at /) ───────────────────────────────────────
 
 class TestRootPath:
+    """GET / — confirm no route is defined at the root path."""
+
     def test_root_returns_404(self, client):
         assert client.get("/").status_code == 404

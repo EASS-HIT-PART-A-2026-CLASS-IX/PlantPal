@@ -32,7 +32,7 @@ EASS-HIT/
 │   ├── care_log.py                 # Care Log page (timeline, drilldown, notes)
 │   ├── theme.css                   # Custom green & white theme
 │   ├── tests/
-│   │   └── test_frontend.py        # 8 frontend tests (mocked, no backend needed)
+│   │   └── test_frontend.py        # 10 frontend tests (mocked, no backend needed)
 │   └── requirements.txt
 ├── .env.example
 └── .gitignore
@@ -69,9 +69,17 @@ In a second terminal:
 
 ```bash
 cd frontend
-python3 -m venv .venv
+python3 -m venv .venv          # first time only — creates a virtual environment
+source .venv/bin/activate      # activate the venv (required every new terminal)
+pip install -r requirements.txt  # first time only — installs Streamlit & deps
+streamlit run plantpal_ui.py
+```
+
+On subsequent runs, you only need to activate and launch:
+
+```bash
+cd frontend
 source .venv/bin/activate
-pip install -r requirements.txt
 streamlit run plantpal_ui.py
 ```
 
@@ -79,17 +87,24 @@ streamlit run plantpal_ui.py
 
 Dashboard: http://localhost:8501
 
-Point to a different backend:
+#### Pointing to a different backend
+
+By default the frontend connects to `http://localhost:8000`. To use a different backend address (e.g. a different port or a remote machine), set the `API_URL` environment variable **after activating the venv**:
 
 ```bash
-API_URL=http://some-host:8000 streamlit run plantpal_ui.py
+cd frontend
+source .venv/bin/activate
+API_URL=http://localhost:9000 streamlit run plantpal_ui.py
 ```
+
+The sidebar shows a green "Backend connected" or red "Backend unreachable" indicator so you can verify the connection.
 
 Run frontend tests (no backend needed, uses mocks):
 
 ```bash
 cd frontend
-python3 -m pytest tests/ -v  # all 8 tests
+source .venv/bin/activate
+python3 -m pytest tests/ -v  # all 10 tests
 ```
 
 ## Features
@@ -135,7 +150,7 @@ python3 -m pytest tests/ -v  # all 8 tests
   - All edits (name, location, frequency, etc.) appear in the timeline
 - **Search and Filter** — filter by name, location, health, or light need
 - **Export to JSON** — download your plant collection as a JSON file (EX2 small extra)
-- 8 frontend tests using mocks (no backend needed)
+- 10 frontend tests using mocks (no backend needed)
 
 ## AI Assistance
 
@@ -147,4 +162,4 @@ This project was built with the help of an AI coding agent (Claude / Cursor) for
 - Dashboard layout and styling
 - Documentation
 
-All code was reviewed and tested locally. Backend: 48 tests passing. Frontend: 8 tests passing.
+All code was reviewed and tested locally. Backend: 48 tests passing. Frontend: 10 tests passing.
