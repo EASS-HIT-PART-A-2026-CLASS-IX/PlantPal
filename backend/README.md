@@ -18,8 +18,10 @@ mkdir -p data
 uv run uvicorn app.main:app --reload
 ```
 
-The API is available at **http://localhost:8000**.  
-Interactive docs at **http://localhost:8000/docs**.
+> **Note:** There is no route at the root path (`/`), so visiting http://localhost:8000 will return a `404`.
+
+Interactive Swagger docs: **http://localhost:8000/docs**  
+Health check: **http://localhost:8000/health**
 
 ### 3. Run tests
 
@@ -69,9 +71,7 @@ backend/
 │       └── care_events.py     # Care event queries + creation
 ├── tests/
 │   ├── conftest.py            # In-memory SQLite fixtures
-│   ├── test_plants.py         # Plant CRUD + auto-logging (23 tests)
-│   ├── test_care_events.py    # Care events API (8 tests)
-│   └── test_smoke.py          # Health / docs smoke tests (3 tests)
+│   └── test_all_endpoints.py  # Full endpoint coverage (48 tests)
 ├── seed.py                    # Sample data loader (8 plants + 30 events)
 ├── pyproject.toml             # Dependencies
 └── Dockerfile
