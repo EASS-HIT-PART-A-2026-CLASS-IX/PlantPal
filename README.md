@@ -59,13 +59,13 @@ Once running:
 - **API docs (Swagger)**: http://localhost:8000/docs
 - **Health check**: http://localhost:8000/health
 
-To seed sample data into the running backend:
+Seed sample data into the running backend:
 
 ```bash
 sudo docker compose exec backend uv run python seed.py
 ```
 
-To stop:
+Stop the services:
 
 ```bash
 sudo docker compose down            # stop and remove containers
@@ -83,7 +83,11 @@ FRONTEND_PORT=9501
 
 Then run `sudo docker compose up --build`. The dashboard will be at http://localhost:9501 and the API at http://localhost:9000. Internally the containers still use 8000/8501 — only the host-side mappings change.
 
-### Option B: Manual (local development)
+CORS and the frontend-to-backend connection are configured automatically by Docker Compose, so changing ports in `.env` is all you need.
+
+### Option B: Run without Docker (local development)
+
+Use this if you want to run the backend and frontend directly on your machine without containers.
 
 #### 1. Backend
 
@@ -94,18 +98,12 @@ mkdir -p data                  # SQLite database directory
 uv run uvicorn app.main:app --reload
 ```
 
-The API is now at http://localhost:8000. There is no route at `/`, so visiting the root returns 404 — go to http://localhost:8000/docs for the Swagger UI.
+The API is now at http://localhost:8000. Visit http://localhost:8000/docs for the Swagger UI (the root `/` returns 404 — that is expected).
 
-Seed sample data (with the API already running):
+Seed sample data (with the API already running in another terminal):
 
 ```bash
 uv run python seed.py
-```
-
-The seed script reads `API_URL` from the environment (default: `http://localhost:8000`). If your backend runs on a different port:
-
-```bash
-API_URL=http://localhost:9000 uv run python seed.py
 ```
 
 Run backend tests:
@@ -138,27 +136,7 @@ streamlit run plantpal_ui.py
 
 Dashboard: http://localhost:8501
 
-#### Pointing to a different backend
-
-By default the frontend connects to `http://localhost:8000`. Set the `API_URL` environment variable to override:
-
-```bash
-API_URL=http://localhost:9000 streamlit run plantpal_ui.py
-```
-
-When using Docker Compose this is handled automatically — the frontend connects to `http://backend:8000` via the internal Docker network, so no manual `API_URL` is needed.
-
 The sidebar shows a green "Backend connected" or red "Backend unreachable" indicator so you can verify the connection at a glance.
-
-#### CORS configuration
-
-The backend reads allowed origins from the `CORS_ORIGINS` environment variable (comma-separated, default: `http://localhost:8501,http://localhost:5173`). If you change the frontend port, update CORS to match:
-
-```bash
-CORS_ORIGINS=http://localhost:9501 uv run uvicorn app.main:app --reload
-```
-
-When using Docker Compose, `CORS_ORIGINS` is set automatically based on `FRONTEND_PORT`.
 
 Run frontend tests (no backend needed, uses mocks):
 
@@ -168,18 +146,39 @@ source .venv/bin/activate
 python -m pytest tests/ -v     # all 10 tests
 ```
 
+#### Using non-default ports (manual mode only)
+
+When running without Docker, if you change the backend port you need to tell the frontend and seed script where to find it, and update CORS so the backend accepts requests from the frontend:
+
+```bash
+# Terminal 1 — backend on port 9000 with CORS for frontend on port 9501
+cd backend
+CORS_ORIGINS=http://localhost:9501 uv run uvicorn app.main:app --reload --port 9000
+
+# Terminal 2 — seed against the non-default port
+cd backend
+API_URL=http://localhost:9000 uv run python seed.py
+
+# Terminal 3 — frontend pointing to the non-default backend
+cd frontend
+source .venv/bin/activate
+API_URL=http://localhost:9000 streamlit run plantpal_ui.py
+```
+
 ## Environment Variables
 
 All configuration is centralized in `.env.example`. Copy it to `.env` and adjust as needed.
 
-| Variable | Default | Used By | Description |
+| Variable | Default | Where it is used | Description |
 |---|---|---|---|
-| `BACKEND_PORT` | `8000` | docker-compose | Host port exposed for the backend API |
-| `FRONTEND_PORT` | `8501` | docker-compose | Host port exposed for the Streamlit dashboard |
-| `API_URL` | `http://localhost:8000` | frontend, seed.py | URL the frontend (and seed script) use to reach the backend |
-| `CORS_ORIGINS` | `http://localhost:8501,http://localhost:5173` | backend | Comma-separated origins allowed by the backend CORS middleware |
+| `BACKEND_PORT` | `8000` | docker-compose.yml | Host port exposed for the backend API |
+| `FRONTEND_PORT` | `8501` | docker-compose.yml | Host port exposed for the Streamlit dashboard |
+| `API_URL` | `http://localhost:8000` | frontend (`plant_api.py`), `seed.py` | URL used to reach the backend. Set automatically in Docker Compose. |
+| `CORS_ORIGINS` | `http://localhost:8501,http://localhost:5173` | backend (`main.py`) | Comma-separated origins allowed by CORS. Set automatically in Docker Compose. |
 
-**Docker Compose note:** When using `docker compose`, `API_URL` is automatically set to `http://backend:8000` (internal network) and `CORS_ORIGINS` is derived from `FRONTEND_PORT`. You only need to set `BACKEND_PORT` and `FRONTEND_PORT` in your `.env` file.
+**Docker Compose users** only need to set `BACKEND_PORT` and `FRONTEND_PORT` in `.env`. The compose file automatically wires `API_URL` (to `http://backend:8000` via the internal network) and `CORS_ORIGINS` (based on `FRONTEND_PORT`).
+
+**Manual mode users** can set `API_URL` and `CORS_ORIGINS` as environment variables when launching the frontend or backend with non-default ports (see examples above).
 
 ## Features
 
