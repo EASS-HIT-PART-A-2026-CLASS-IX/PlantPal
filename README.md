@@ -67,7 +67,7 @@ In a second terminal:
 
 ```bash
 cd frontend
-python3 -m venv .venv          # first time only — creates a virtual environment
+python -m venv .venv           # first time only — creates a virtual environment
 source .venv/bin/activate      # activate the venv (required every new terminal)
 pip install -r requirements.txt  # first time only — installs Streamlit & deps
 streamlit run plantpal_ui.py
@@ -102,7 +102,7 @@ Run frontend tests (no backend needed, uses mocks):
 ```bash
 cd frontend
 source .venv/bin/activate
-python3 -m pytest tests/ -v  # all 10 tests
+python -m pytest tests/ -v   # all 10 tests
 ```
 
 ## Features
