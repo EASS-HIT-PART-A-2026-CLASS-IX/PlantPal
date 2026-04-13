@@ -98,18 +98,12 @@ mkdir -p data                  # SQLite database directory
 uv run uvicorn app.main:app --reload
 ```
 
-The API is now at http://localhost:8000. Visit http://localhost:8000/docs for the Swagger UI (the root `/` returns 404 — that is expected).
+The API is now at http://localhost:8000. Visit http://localhost:8000/docs for the Swagger UI 
 
 Seed sample data (with the API already running in another terminal):
 
 ```bash
 uv run python seed.py
-```
-
-Run backend tests:
-
-```bash
-uv run pytest -v               # all 49 tests (in-memory SQLite, no setup needed)
 ```
 
 #### 2. Frontend
@@ -137,14 +131,6 @@ streamlit run plantpal_ui.py
 Dashboard: http://localhost:8501
 
 The sidebar shows a green "Backend connected" or red "Backend unreachable" indicator so you can verify the connection at a glance.
-
-Run frontend tests (no backend needed, uses mocks):
-
-```bash
-cd frontend
-source .venv/bin/activate
-python -m pytest tests/ -v     # all 10 tests
-```
 
 #### Using non-default ports (manual mode only)
 
@@ -179,6 +165,43 @@ All configuration is centralized in `.env.example`. Copy it to `.env` and adjust
 **Docker Compose users** only need to set `BACKEND_PORT` and `FRONTEND_PORT` in `.env`. The compose file automatically wires `API_URL` (to `http://backend:8000` via the internal network) and `CORS_ORIGINS` (based on `FRONTEND_PORT`).
 
 **Manual mode users** can set `API_URL` and `CORS_ORIGINS` as environment variables when launching the frontend or backend with non-default ports (see examples above).
+
+## Tests
+
+### Backend — 49 pytest tests
+
+Tests use an in-memory SQLite database, so no running server or setup is needed.
+
+**With Docker:**
+
+```bash
+sudo docker compose exec backend uv run pytest -v
+```
+
+**Without Docker:**
+
+```bash
+cd backend
+uv run pytest -v
+```
+
+### Frontend — 10 pytest tests
+
+Tests use mocks, so no running backend is needed.
+
+**With Docker:**
+
+```bash
+sudo docker compose exec frontend python -m pytest tests/ -v
+```
+
+**Without Docker:**
+
+```bash
+cd frontend
+source .venv/bin/activate
+python -m pytest tests/ -v
+```
 
 ## Features
 
