@@ -1,16 +1,21 @@
-/* PlantPal – fresh green & white light theme */
+/* PlantPal – fresh green & white light theme with card-grid layout */
 
 :root {
     --color-primary: #16a34a;
     --color-primary-light: #bbf7d0;
     --color-primary-hover: #15803d;
+    --color-primary-deep: #14532d;
     --color-bg: #f0fdf4;
     --color-surface: #ffffff;
     --color-border: #d1e7dd;
     --color-text: #1e293b;
     --color-text-muted: #64748b;
+    --color-text-light: #9ca3af;
     --color-danger: #dc2626;
     --color-warning: #d97706;
+    --color-blue: #2563eb;
+    --color-slate-50: #f8fafc;
+    --color-slate-100: #f1f5f9;
 }
 
 /* ===== Global ===== */
@@ -35,7 +40,7 @@
 
 /* ===== Sidebar ===== */
 section[data-testid="stSidebar"] {
-    background-color: var(--color-primary);
+    background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
     border-right: none;
 }
 
@@ -56,45 +61,344 @@ section[data-testid="stSidebar"] a:hover {
     color: #ffffff !important;
 }
 
-/* Sidebar radio — white text on green */
 section[data-testid="stSidebar"] [data-testid="stRadio"] label p {
     color: #ffffff !important;
 }
 
-/* Sidebar dividers */
 section[data-testid="stSidebar"] hr {
+    border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Sidebar inputs: translucent white */
+section[data-testid="stSidebar"] .stTextInput input {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+}
+
+section[data-testid="stSidebar"] .stTextInput input::placeholder {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+
+section[data-testid="stSidebar"] .stTextInput input:focus {
+    border-color: rgba(255, 255, 255, 0.7) !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2) !important;
+}
+
+section[data-testid="stSidebar"] .stMultiSelect label p,
+section[data-testid="stSidebar"] .stTextInput label p {
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-size: 13px !important;
+}
+
+section[data-testid="stSidebar"] [data-testid="stMultiSelect"] > div > div {
+    background-color: rgba(255, 255, 255, 0.15) !important;
     border-color: rgba(255, 255, 255, 0.3) !important;
 }
 
-/* ===== Metric cards ===== */
-[data-testid="stMetric"] {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+section[data-testid="stSidebar"] [data-baseweb="tag"] {
+    background-color: rgba(255, 255, 255, 0.25) !important;
 }
 
-[data-testid="stMetricLabel"] label,
-[data-testid="stMetricLabel"] p,
-[data-testid="stMetricLabel"] div {
-    color: var(--color-text-muted) !important;
+section[data-testid="stSidebar"] [data-testid="stExpander"] {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
 }
 
-[data-testid="stMetricValue"] div {
-    color: var(--color-primary) !important;
+/* ===== Welcome Banner ===== */
+.welcome-banner {
+    background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 50%, #ffffff 100%);
+    border: 1px solid #bbf7d0;
+    border-radius: 16px;
+    padding: 28px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.welcome-greeting {
+    font-size: 28px;
     font-weight: 700;
+    color: #14532d;
+    line-height: 1.2;
 }
 
-/* ===== Plant cards ===== */
+.welcome-subtitle {
+    font-size: 15px;
+    color: #4b5563;
+    margin-top: 6px;
+}
+
+.water-alert {
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.all-good {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.welcome-icon {
+    font-size: 52px;
+    opacity: 0.7;
+}
+
+/* ===== Stats Strip (glassmorphism) ===== */
+.stats-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    padding: 20px 16px;
+    margin: 16px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.stat-item {
+    text-align: center;
+    flex: 1;
+}
+
+.stat-emoji {
+    font-size: 22px;
+    margin-bottom: 4px;
+}
+
+.stat-number {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--color-text);
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 2px;
+}
+
+.stat-separator {
+    width: 1px;
+    height: 48px;
+    background: var(--color-border);
+    flex-shrink: 0;
+}
+
+.healthy-color { color: #16a34a !important; }
+.water-color { color: #2563eb !important; }
+.danger-color { color: #dc2626 !important; }
+.attention-color { color: #d97706 !important; }
+
+/* ===== Plant Cards (grid items) ===== */
+.plant-card {
+    padding: 0;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.card-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.card-species {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    font-style: italic;
+    margin-top: 2px;
+}
+
+/* Health pills */
+.health-pill {
+    padding: 3px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.health-pill.healthy {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.health-pill.attention {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.health-pill.critical {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* Card info rows */
+.card-info {
+    margin: 8px 0;
+}
+
+.info-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #374151;
+    margin: 5px 0;
+}
+
+.info-icon {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* Watering ring section */
+.watering-section {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 12px 0;
+    padding: 10px 12px;
+    background: var(--color-slate-50);
+    border-radius: 10px;
+}
+
+.water-ring {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+}
+
+.ring-bg {
+    fill: none;
+    stroke: #e2e8f0;
+    stroke-width: 5;
+}
+
+.ring-fill {
+    fill: none;
+    stroke: #16a34a;
+    stroke-width: 5;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: center;
+    transition: stroke-dashoffset 0.4s ease;
+}
+
+.ring-fill.warn {
+    stroke: #d97706;
+}
+
+.ring-fill.overdue {
+    stroke: #dc2626;
+}
+
+.water-label {
+    flex: 1;
+    min-width: 0;
+}
+
+.water-time {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.water-sub {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+/* Card notes */
+.card-notes {
+    font-size: 12px;
+    color: var(--color-text-light);
+    margin-top: 8px;
+    border-top: 1px solid var(--color-slate-100);
+    padding-top: 8px;
+    line-height: 1.4;
+}
+
+/* Overdue pulsing dot */
+.overdue-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #dc2626;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+    vertical-align: middle;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.4); }
+}
+
+/* Card hover lift */
 [data-testid="stVerticalBlock"] > div[data-testid="stContainer"] {
     border-color: var(--color-border) !important;
-    border-radius: 10px;
+    border-radius: 12px;
     background-color: var(--color-surface);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-/* ===== Inputs ===== */
+[data-testid="stVerticalBlock"] > div[data-testid="stContainer"]:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+/* Overdue card glow */
+.overdue-card {
+    box-shadow: 0 0 14px rgba(220, 38, 38, 0.12) !important;
+    border-color: #fca5a5 !important;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+}
+
+.empty-state-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: 8px;
+}
+
+.empty-state-text {
+    font-size: 15px;
+    color: var(--color-text-muted);
+}
+
+/* ===== Inputs (main content) ===== */
 .stTextInput label, .stSelectbox label, .stMultiSelect label,
 .stNumberInput label, .stTextArea label, .stSlider label {
     color: var(--color-text) !important;
@@ -116,7 +420,6 @@ section[data-testid="stSidebar"] hr {
     box-shadow: 0 0 0 2px var(--color-primary-light) !important;
 }
 
-/* Selectbox / multiselect */
 [data-testid="stSelectbox"] > div > div,
 [data-testid="stMultiSelect"] > div > div {
     background-color: var(--color-surface) !important;
@@ -226,6 +529,26 @@ div[role="dialog"] button[aria-label="Close"] {
 /* ===== Alerts ===== */
 .stAlert [data-testid="stAlertContentError"] {
     font-weight: 600;
+}
+
+/* ===== Metric cards (Care Log page) ===== */
+[data-testid="stMetric"] {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-testid="stMetricLabel"] label,
+[data-testid="stMetricLabel"] p,
+[data-testid="stMetricLabel"] div {
+    color: var(--color-text-muted) !important;
+}
+
+[data-testid="stMetricValue"] div {
+    color: var(--color-primary) !important;
+    font-weight: 700;
 }
 
 /* ===== Hide footer, transparent header ===== */

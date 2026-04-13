@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime, timezone
 
 import streamlit as st
@@ -32,11 +33,13 @@ load_css()
 # Helpers
 # ---------------------------------------------------------------------------
 LIGHT_ICONS = {"low": "🌑", "medium": "🌤️", "high": "☀️"}
-HEALTH_BADGES = {
-    "healthy": ("🟢", "Healthy"),
-    "needs_attention": ("🟡", "Needs Attention"),
-    "critical": ("🔴", "Critical"),
+HEALTH_CSS = {
+    "healthy": ("healthy", "Healthy"),
+    "needs_attention": ("attention", "Needs Attention"),
+    "critical": ("critical", "Critical"),
 }
+
+CIRCUMFERENCE = 2 * math.pi * 34  # ~213.6 for r=34
 
 
 def hours_since_watered(last_watered: str | None) -> float | None:
@@ -87,9 +90,93 @@ def format_frequency(hours: int) -> str:
     return f"Every {days:.1f} days"
 
 
+def watering_ring_html(plant: dict) -> str:
+    """Build an SVG watering-ring showing elapsed vs scheduled time."""
+    hours = hours_since_watered(plant.get("last_watered"))
+    freq = plant.get("water_frequency_hours", 168)
+
+    if hours is None:
+        pct = 0.0
+        time_text = "Never watered"
+        sub_text = f"Schedule: {format_frequency(freq)}"
+        ring_class = ""
+    else:
+        pct = min(hours / freq, 1.0) if freq > 0 else 1.0
+        time_text = format_relative(plant.get("last_watered"))
+        remaining = freq - hours
+        if remaining > 0:
+            if remaining < 24:
+                sub_text = f"Next in {int(remaining)}h"
+            else:
+                sub_text = f"Next in {int(remaining / 24)}d"
+        else:
+            sub_text = "Overdue!"
+        if pct >= 1.0:
+            ring_class = "overdue"
+        elif pct >= 0.75:
+            ring_class = "warn"
+        else:
+            ring_class = ""
+
+    offset = CIRCUMFERENCE * (1 - pct)
+
+    return f"""<div class="watering-section">
+  <svg class="water-ring" viewBox="0 0 80 80">
+    <circle class="ring-bg" cx="40" cy="40" r="34"/>
+    <circle class="ring-fill {ring_class}" cx="40" cy="40" r="34"
+            stroke-dasharray="{CIRCUMFERENCE:.1f}"
+            stroke-dashoffset="{offset:.1f}"/>
+  </svg>
+  <div class="water-label">
+    <div class="water-time">{time_text}</div>
+    <div class="water-sub">{sub_text}</div>
+  </div>
+</div>"""
+
+
+def plant_card_html(plant: dict) -> str:
+    """Return the custom HTML for a single plant card."""
+    overdue = is_overdue(plant)
+    css_class, health_label = HEALTH_CSS.get(
+        plant["health_status"], ("", plant["health_status"])
+    )
+    light_icon = LIGHT_ICONS.get(plant["light_need"], "")
+    freq_hours = plant.get("water_frequency_hours", 168)
+
+    name_html = plant["name"]
+    if overdue:
+        name_html += ' <span class="overdue-dot"></span>'
+
+    notes_html = ""
+    if plant.get("notes"):
+        escaped = plant["notes"][:80].replace("&", "&amp;").replace("<", "&lt;")
+        notes_html = f'<div class="card-notes">{escaped}</div>'
+
+    ring = watering_ring_html(plant)
+
+    return f"""<div class="plant-card">
+  <div class="card-header">
+    <div>
+      <div class="card-name">{name_html}</div>
+      <div class="card-species">{plant["species"]}</div>
+    </div>
+    <span class="health-pill {css_class}">{health_label}</span>
+  </div>
+  <div class="card-info">
+    <div class="info-row"><span class="info-icon">📍</span><span>{plant["location"]}</span></div>
+    <div class="info-row"><span class="info-icon">{light_icon}</span><span>{plant["light_need"].capitalize()} light</span></div>
+    <div class="info-row"><span class="info-icon">🔄</span><span>{format_frequency(freq_hours)}</span></div>
+  </div>
+  {ring}
+  {notes_html}
+</div>"""
+
+
 # ---------------------------------------------------------------------------
-# Sidebar
+# Sidebar — navigation + search/filters
 # ---------------------------------------------------------------------------
+all_plants = cached_api.get_plants()
+
 with st.sidebar:
     st.markdown("## 🌿 PlantPal")
     st.caption("Indoor Plant Care Tracker")
@@ -102,6 +189,21 @@ with st.sidebar:
     )
 
     st.divider()
+
+    # Search & filter controls (only visible on Dashboard)
+    if page == "Dashboard":
+        search = st.text_input("🔍 Search", placeholder="Search by name…", label_visibility="collapsed")
+
+        with st.expander("Filters", expanded=False):
+            locations = sorted({p["location"] for p in all_plants})
+            filter_loc = st.multiselect("Location", locations, placeholder="All locations")
+            filter_health = st.multiselect(
+                "Health", ["healthy", "needs_attention", "critical"], placeholder="All"
+            )
+            filter_light = st.multiselect("Light", ["low", "medium", "high"], placeholder="All")
+
+        st.divider()
+
     backend_ok = plant_api.healthcheck()
     if backend_ok:
         st.success("Backend connected", icon="✅")
@@ -134,27 +236,68 @@ if st.session_state.get("_prev_page") != "Dashboard":
     for key in list(st.session_state):
         if key.startswith(("editing_", "confirm_del_")):
             del st.session_state[key]
+    st.session_state.pop("show_add_form", None)
 st.session_state["_prev_page"] = "Dashboard"
 
-plants = cached_api.get_plants()
+plants = all_plants
 
-# -- Header row --
-col_title, col_action = st.columns([4, 1])
-with col_title:
-    st.markdown("# 🌱 My Plants")
-with col_action:
-    if st.button("➕ Add Plant", use_container_width=True, type="primary"):
-        st.session_state["show_add_form"] = True
-
-# -- Metrics --
+# -- Compute metrics --
 total = len(plants)
 healthy = sum(1 for p in plants if p.get("health_status") == "healthy")
 overdue_count = sum(1 for p in plants if is_overdue(p))
+critical_count = sum(1 for p in plants if p.get("health_status") == "critical")
 
-m1, m2, m3 = st.columns(3)
-m1.metric("Total Plants 🌱", total)
-m2.metric("Healthy 🟢", healthy)
-m3.metric("Need Water 💧", overdue_count)
+# -- Welcome Banner --
+if overdue_count > 0:
+    status_html = f'<span class="water-alert">{overdue_count} need{"s" if overdue_count == 1 else ""} water</span>'
+else:
+    status_html = '<span class="all-good">All plants are on track!</span>'
+
+st.markdown(
+    f"""<div class="welcome-banner">
+  <div>
+    <div class="welcome-greeting">Welcome back, Plant Parent</div>
+    <div class="welcome-subtitle">
+      You have <strong>{total}</strong> plant{"s" if total != 1 else ""} in your garden &mdash; {status_html}
+    </div>
+  </div>
+  <div class="welcome-icon">🌿</div>
+</div>""",
+    unsafe_allow_html=True,
+)
+
+if st.button("➕ Add Plant", use_container_width=True, type="primary"):
+    st.session_state["show_add_form"] = True
+
+# -- Stats Strip --
+st.markdown(
+    f"""<div class="stats-strip">
+  <div class="stat-item">
+    <div class="stat-emoji">🌱</div>
+    <div class="stat-number">{total}</div>
+    <div class="stat-label">Total Plants</div>
+  </div>
+  <div class="stat-separator"></div>
+  <div class="stat-item">
+    <div class="stat-emoji">💚</div>
+    <div class="stat-number healthy-color">{healthy}</div>
+    <div class="stat-label">Healthy</div>
+  </div>
+  <div class="stat-separator"></div>
+  <div class="stat-item">
+    <div class="stat-emoji">💧</div>
+    <div class="stat-number water-color">{overdue_count}</div>
+    <div class="stat-label">Need Water</div>
+  </div>
+  <div class="stat-separator"></div>
+  <div class="stat-item">
+    <div class="stat-emoji">⚠️</div>
+    <div class="stat-number danger-color">{critical_count}</div>
+    <div class="stat-label">Critical</div>
+  </div>
+</div>""",
+    unsafe_allow_html=True,
+)
 
 # ---------------------------------------------------------------------------
 # Add Plant dialog
@@ -199,167 +342,148 @@ if st.session_state.get("show_add_form"):
     add_dialog()
 
 # ---------------------------------------------------------------------------
-# Search & Filter
+# Apply filters (from sidebar)
 # ---------------------------------------------------------------------------
-st.divider()
-fc1, fc2, fc3, fc4 = st.columns([3, 2, 2, 2])
-with fc1:
-    search = st.text_input("Search", placeholder="Search by name…")
-with fc2:
-    locations = sorted({p["location"] for p in plants})
-    filter_loc = st.multiselect("Location", locations, placeholder="All locations")
-with fc3:
-    filter_health = st.multiselect(
-        "Health", ["healthy", "needs_attention", "critical"], placeholder="All"
-    )
-with fc4:
-    filter_light = st.multiselect("Light", ["low", "medium", "high"], placeholder="All")
-
 filtered = plants
-if search:
-    filtered = [p for p in filtered if search.lower() in p["name"].lower()]
-if filter_loc:
-    filtered = [p for p in filtered if p["location"] in filter_loc]
-if filter_health:
-    filtered = [p for p in filtered if p["health_status"] in filter_health]
-if filter_light:
-    filtered = [p for p in filtered if p["light_need"] in filter_light]
+if page == "Dashboard":
+    if search:
+        filtered = [p for p in filtered if search.lower() in p["name"].lower()]
+    if filter_loc:
+        filtered = [p for p in filtered if p["location"] in filter_loc]
+    if filter_health:
+        filtered = [p for p in filtered if p["health_status"] in filter_health]
+    if filter_light:
+        filtered = [p for p in filtered if p["light_need"] in filter_light]
 
 # ---------------------------------------------------------------------------
-# Plant table
+# Plant card grid
 # ---------------------------------------------------------------------------
 if not filtered:
-    st.info("No plants found. Add your first plant above!")
+    st.markdown(
+        """<div class="empty-state">
+  <div class="empty-state-icon">🌵</div>
+  <div class="empty-state-title">Your garden is empty</div>
+  <div class="empty-state-text">Add your first plant to get started!</div>
+</div>""",
+        unsafe_allow_html=True,
+    )
 else:
-    for plant in filtered:
-        overdue = is_overdue(plant)
-        health_icon, health_label = HEALTH_BADGES.get(
-            plant["health_status"], ("⚪", plant["health_status"])
-        )
-        light_icon = LIGHT_ICONS.get(plant["light_need"], "")
-        freq_hours = plant.get("water_frequency_hours", 168)
+    for i in range(0, len(filtered), 3):
+        cols = st.columns(3)
+        for j, col in enumerate(cols):
+            idx = i + j
+            if idx >= len(filtered):
+                break
+            plant = filtered[idx]
+            overdue = is_overdue(plant)
 
-        with st.container(border=True):
-            c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 2, 3])
+            with col:
+                with st.container(border=True):
+                    st.markdown(
+                        plant_card_html(plant),
+                        unsafe_allow_html=True,
+                    )
 
-            with c1:
-                label = f"**{plant['name']}**"
-                if overdue:
-                    label += " ⚠️"
-                st.markdown(label)
-                st.caption(f"_{plant['species']}_")
-
-            with c2:
-                st.markdown(f"{health_icon} {health_label}")
-                st.caption(f"{light_icon} {plant['light_need']} light")
-
-            with c3:
-                st.markdown(f"📍 {plant['location']}")
-                watered_text = format_relative(plant.get("last_watered"))
-                if overdue:
-                    st.caption(f"💧 Watered: **{watered_text}** — OVERDUE")
-                else:
-                    st.caption(f"💧 Watered: {watered_text}")
-
-            with c4:
-                st.markdown(format_frequency(freq_hours))
-                if plant.get("notes"):
-                    st.caption(plant["notes"][:60])
-
-            with c5:
-                bc1, bc2, bc3 = st.columns(3)
-                with bc1:
-                    if st.button("💧", key=f"water_{plant['id']}", help="Water now"):
-                        plant_api.patch_plant(
-                            plant["id"],
-                            {"last_watered": datetime.now(timezone.utc).isoformat()},
-                        )
-                        cached_api.clear_cache()
-                        st.rerun()
-                with bc2:
-                    if st.button("✏️", key=f"edit_{plant['id']}", help="Edit"):
-                        st.session_state[f"editing_{plant['id']}"] = True
-                        st.rerun()
-                with bc3:
-                    if st.button("🗑️", key=f"del_{plant['id']}", help="Delete"):
-                        st.session_state[f"confirm_del_{plant['id']}"] = True
-                        st.rerun()
-
-        # -- Edit dialog --
-        if st.session_state.get(f"editing_{plant['id']}"):
-
-            @st.dialog(f"Edit {plant['name']}")
-            def edit_dialog(p=plant):
-                name = st.text_input("Name", value=p["name"])
-                species = st.text_input("Species", value=p["species"])
-                location = st.selectbox(
-                    "Location",
-                    ["Living Room", "Bedroom", "Kitchen", "Bathroom", "Balcony", "Office", "Other"],
-                    index=["Living Room", "Bedroom", "Kitchen", "Bathroom", "Balcony", "Office", "Other"].index(p["location"])
-                    if p["location"] in ["Living Room", "Bedroom", "Kitchen", "Bathroom", "Balcony", "Office", "Other"]
-                    else 0,
-                )
-                light = st.select_slider(
-                    "Light Need",
-                    options=["low", "medium", "high"],
-                    value=p["light_need"],
-                )
-                freq = st.number_input(
-                    "Water every (hours)", min_value=1, max_value=2160, value=p["water_frequency_hours"]
-                )
-                health = st.selectbox(
-                    "Health",
-                    ["healthy", "needs_attention", "critical"],
-                    index=["healthy", "needs_attention", "critical"].index(p["health_status"]),
-                )
-                notes = st.text_area("Notes", value=p.get("notes", ""), max_chars=300)
-
-                if st.button("Save Changes", type="primary", use_container_width=True):
-                    try:
-                        plant_api.update_plant(
-                            p["id"],
-                            {
-                                "name": name,
-                                "species": species,
-                                "location": location,
-                                "light_need": light,
-                                "water_frequency_hours": freq,
-                                "last_watered": p.get("last_watered", ""),
-                                "health_status": health,
-                                "image_url": p.get("image_url", ""),
-                                "notes": notes,
-                            },
-                        )
-                        cached_api.clear_cache()
-                        del st.session_state[f"editing_{p['id']}"]
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(f"Update failed: {exc}")
-
-            edit_dialog()
-
-        # -- Delete confirmation --
-        if st.session_state.get(f"confirm_del_{plant['id']}"):
-
-            @st.dialog(f"Delete {plant['name']}?")
-            def delete_dialog(p=plant):
-                st.warning(f"Are you sure you want to delete **{p['name']}**? This cannot be undone.")
-                dc1, dc2 = st.columns(2)
-                with dc1:
-                    if st.button("Cancel", use_container_width=True):
-                        del st.session_state[f"confirm_del_{p['id']}"]
-                        st.rerun()
-                with dc2:
-                    if st.button("Delete", type="primary", use_container_width=True):
-                        try:
-                            plant_api.delete_plant(p["id"])
+                    b1, b2, b3 = st.columns(3)
+                    with b1:
+                        if st.button("💧", key=f"water_{plant['id']}", help="Water now"):
+                            plant_api.patch_plant(
+                                plant["id"],
+                                {"last_watered": datetime.now(timezone.utc).isoformat()},
+                            )
                             cached_api.clear_cache()
-                            del st.session_state[f"confirm_del_{p['id']}"]
+                            st.rerun()
+                    with b2:
+                        if st.button("✏️", key=f"edit_{plant['id']}", help="Edit"):
+                            st.session_state[f"editing_{plant['id']}"] = True
+                            st.rerun()
+                    with b3:
+                        if st.button("🗑️", key=f"del_{plant['id']}", help="Delete"):
+                            st.session_state[f"confirm_del_{plant['id']}"] = True
+                            st.rerun()
+
+        # Dialogs for plants in this row
+        for j in range(3):
+            idx = i + j
+            if idx >= len(filtered):
+                break
+            plant = filtered[idx]
+
+            # -- Edit dialog --
+            if st.session_state.get(f"editing_{plant['id']}"):
+
+                @st.dialog(f"Edit {plant['name']}")
+                def edit_dialog(p=plant):
+                    name = st.text_input("Name", value=p["name"])
+                    species = st.text_input("Species", value=p["species"])
+                    location = st.selectbox(
+                        "Location",
+                        ["Living Room", "Bedroom", "Kitchen", "Bathroom", "Balcony", "Office", "Other"],
+                        index=["Living Room", "Bedroom", "Kitchen", "Bathroom", "Balcony", "Office", "Other"].index(p["location"])
+                        if p["location"] in ["Living Room", "Bedroom", "Kitchen", "Bathroom", "Balcony", "Office", "Other"]
+                        else 0,
+                    )
+                    light = st.select_slider(
+                        "Light Need",
+                        options=["low", "medium", "high"],
+                        value=p["light_need"],
+                    )
+                    freq = st.number_input(
+                        "Water every (hours)", min_value=1, max_value=2160, value=p["water_frequency_hours"]
+                    )
+                    health = st.selectbox(
+                        "Health",
+                        ["healthy", "needs_attention", "critical"],
+                        index=["healthy", "needs_attention", "critical"].index(p["health_status"]),
+                    )
+                    notes = st.text_area("Notes", value=p.get("notes", ""), max_chars=300)
+
+                    if st.button("Save Changes", type="primary", use_container_width=True):
+                        try:
+                            plant_api.update_plant(
+                                p["id"],
+                                {
+                                    "name": name,
+                                    "species": species,
+                                    "location": location,
+                                    "light_need": light,
+                                    "water_frequency_hours": freq,
+                                    "last_watered": p.get("last_watered", ""),
+                                    "health_status": health,
+                                    "image_url": p.get("image_url", ""),
+                                    "notes": notes,
+                                },
+                            )
+                            cached_api.clear_cache()
+                            del st.session_state[f"editing_{p['id']}"]
                             st.rerun()
                         except Exception as exc:
-                            st.error(f"Delete failed: {exc}")
+                            st.error(f"Update failed: {exc}")
 
-            delete_dialog()
+                edit_dialog()
+
+            # -- Delete confirmation --
+            if st.session_state.get(f"confirm_del_{plant['id']}"):
+
+                @st.dialog(f"Delete {plant['name']}?")
+                def delete_dialog(p=plant):
+                    st.warning(f"Are you sure you want to delete **{p['name']}**? This cannot be undone.")
+                    dc1, dc2 = st.columns(2)
+                    with dc1:
+                        if st.button("Cancel", use_container_width=True):
+                            del st.session_state[f"confirm_del_{p['id']}"]
+                            st.rerun()
+                    with dc2:
+                        if st.button("Delete", type="primary", use_container_width=True):
+                            try:
+                                plant_api.delete_plant(p["id"])
+                                cached_api.clear_cache()
+                                del st.session_state[f"confirm_del_{p['id']}"]
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(f"Delete failed: {exc}")
+
+                delete_dialog()
 
 # ---------------------------------------------------------------------------
 # Export to JSON (small extra)

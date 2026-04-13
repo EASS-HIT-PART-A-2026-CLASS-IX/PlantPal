@@ -6,11 +6,12 @@ with realistic watering histories and care events so both the Dashboard
 and Care Log have meaningful content to display.
 """
 
+import os
 from datetime import datetime, timedelta, timezone
 
 import httpx
 
-API = "http://localhost:8000"
+API = os.getenv("API_URL", "http://localhost:8000")
 
 now = datetime.now(timezone.utc)
 

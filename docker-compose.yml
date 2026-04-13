@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./backend
+    container_name: plantpal-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - CORS_ORIGINS=http://localhost:${FRONTEND_PORT:-8501}
+    volumes:
+      - backend-data:/app/data
+
+  frontend:
+    build: ./frontend
+    container_name: plantpal-frontend
+    ports:
+      - "${FRONTEND_PORT:-8501}:8501"
+    environment:
+      - API_URL=http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  backend-data:

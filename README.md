@@ -7,7 +7,7 @@ Manage your houseplant collection, track watering schedules, and monitor plant h
 ## Project Structure
 
 ```
-EASS-HIT/
+PlantPal/
 ├── backend/                        # FastAPI backend (EX1)
 │   ├── app/
 │   │   ├── main.py                 # FastAPI app, lifespan, CORS, health
@@ -31,49 +31,102 @@ EASS-HIT/
 │   ├── cached_api.py               # Cached data layer with TTL
 │   ├── care_log.py                 # Care Log page (timeline, drilldown, notes)
 │   ├── theme.css                   # Custom green & white theme
+│   ├── Dockerfile
 │   ├── tests/
 │   │   └── test_frontend.py        # 10 frontend tests (mocked, no backend needed)
 │   └── requirements.txt
-├── .env.example
+├── docker-compose.yml              # One-command full-stack launch
+├── .env.example                    # Environment variable template
 └── .gitignore
 ```
 
 ## Quick Start
 
-### 1. Backend
+### Option A: Docker Compose (recommended)
+
+The fastest way to get the full stack running:
+
+```bash
+cp .env.example .env                    # create your local env file
+sudo docker compose up --build          # builds both images and starts the services
+```
+
+> **Note:** Docker commands require `sudo` on most Linux systems unless your user is in the `docker` group.
+
+Once running:
+
+- **Dashboard**: http://localhost:8501
+- **API docs (Swagger)**: http://localhost:8000/docs
+- **Health check**: http://localhost:8000/health
+
+To seed sample data into the running backend:
+
+```bash
+sudo docker compose exec backend uv run python seed.py
+```
+
+To stop:
+
+```bash
+sudo docker compose down            # stop and remove containers
+sudo docker compose down -v         # also delete the persisted SQLite volume
+```
+
+#### Changing ports
+
+Edit `.env` before starting:
+
+```env
+BACKEND_PORT=9000
+FRONTEND_PORT=9501
+```
+
+Then run `sudo docker compose up --build`. The dashboard will be at http://localhost:9501 and the API at http://localhost:9000. Internally the containers still use 8000/8501 — only the host-side mappings change.
+
+### Option B: Manual (local development)
+
+#### 1. Backend
 
 ```bash
 cd backend
-uv sync
-mkdir -p data
+uv sync                        # install dependencies
+mkdir -p data                  # SQLite database directory
 uv run uvicorn app.main:app --reload
 ```
 
-Seed sample data (with the API running):
+The API is now at http://localhost:8000. There is no route at `/`, so visiting the root returns 404 — go to http://localhost:8000/docs for the Swagger UI.
+
+Seed sample data (with the API already running):
 
 ```bash
 uv run python seed.py
 ```
 
+The seed script reads `API_URL` from the environment (default: `http://localhost:8000`). If your backend runs on a different port:
+
+```bash
+API_URL=http://localhost:9000 uv run python seed.py
+```
+
 Run backend tests:
 
 ```bash
-uv run pytest -v                            # all 49 tests
+uv run pytest -v               # all 49 tests (in-memory SQLite, no setup needed)
 ```
 
-### 2. Frontend
+#### 2. Frontend
 
 In a second terminal:
 
 ```bash
 cd frontend
-python -m venv .venv           # first time only — creates a virtual environment
-source .venv/bin/activate      # activate the venv (required every new terminal)
-pip install -r requirements.txt  # first time only — installs Streamlit & deps
+python -m venv .venv                # first time only
+source .venv/bin/activate           # activate venv (every new terminal)
+pip install -r requirements.txt     # first time only
 streamlit run plantpal_ui.py
 ```
 
-On subsequent runs, you only need to activate and launch:
+On subsequent runs you only need:
 
 ```bash
 cd frontend
@@ -87,23 +140,46 @@ Dashboard: http://localhost:8501
 
 #### Pointing to a different backend
 
-By default the frontend connects to `http://localhost:8000`. To use a different backend address (e.g. a different port or a remote machine), set the `API_URL` environment variable **after activating the venv**:
+By default the frontend connects to `http://localhost:8000`. Set the `API_URL` environment variable to override:
 
 ```bash
-cd frontend
-source .venv/bin/activate
 API_URL=http://localhost:9000 streamlit run plantpal_ui.py
 ```
 
-The sidebar shows a green "Backend connected" or red "Backend unreachable" indicator so you can verify the connection.
+When using Docker Compose this is handled automatically — the frontend connects to `http://backend:8000` via the internal Docker network, so no manual `API_URL` is needed.
+
+The sidebar shows a green "Backend connected" or red "Backend unreachable" indicator so you can verify the connection at a glance.
+
+#### CORS configuration
+
+The backend reads allowed origins from the `CORS_ORIGINS` environment variable (comma-separated, default: `http://localhost:8501,http://localhost:5173`). If you change the frontend port, update CORS to match:
+
+```bash
+CORS_ORIGINS=http://localhost:9501 uv run uvicorn app.main:app --reload
+```
+
+When using Docker Compose, `CORS_ORIGINS` is set automatically based on `FRONTEND_PORT`.
 
 Run frontend tests (no backend needed, uses mocks):
 
 ```bash
 cd frontend
 source .venv/bin/activate
-python -m pytest tests/ -v   # all 10 tests
+python -m pytest tests/ -v     # all 10 tests
 ```
+
+## Environment Variables
+
+All configuration is centralized in `.env.example`. Copy it to `.env` and adjust as needed.
+
+| Variable | Default | Used By | Description |
+|---|---|---|---|
+| `BACKEND_PORT` | `8000` | docker-compose | Host port exposed for the backend API |
+| `FRONTEND_PORT` | `8501` | docker-compose | Host port exposed for the Streamlit dashboard |
+| `API_URL` | `http://localhost:8000` | frontend, seed.py | URL the frontend (and seed script) use to reach the backend |
+| `CORS_ORIGINS` | `http://localhost:8501,http://localhost:5173` | backend | Comma-separated origins allowed by the backend CORS middleware |
+
+**Docker Compose note:** When using `docker compose`, `API_URL` is automatically set to `http://backend:8000` (internal network) and `CORS_ORIGINS` is derived from `FRONTEND_PORT`. You only need to set `BACKEND_PORT` and `FRONTEND_PORT` in your `.env` file.
 
 ## Features
 
@@ -115,7 +191,7 @@ python -m pytest tests/ -v   # all 10 tests
 - Automatic health degradation when plants are overdue for watering
 - SQLite persistence via SQLModel
 - Health check endpoint (`/health`)
-- CORS middleware for frontend integration
+- CORS middleware with configurable origins via `CORS_ORIGINS` env var
 - 49 pytest tests using in-memory SQLite (no setup required)
 - Seed script with 8 plants and 30 care events covering all field combinations
 
@@ -136,17 +212,22 @@ python -m pytest tests/ -v   # all 10 tests
 
 ### Frontend (EX2)
 
-- **Dashboard** — view all plants with health badges, light indicators, and watering status
+- **Dashboard** — card-grid layout showing all plants with:
+  - Welcome banner with live garden status summary
+  - Glassmorphism stats strip (Total / Healthy / Need Water / Critical)
+  - 3-column card grid with health pills, SVG watering countdown rings, and notes preview
+  - Pulsing overdue indicators and card hover effects
+  - Custom empty state illustration when no plants exist
 - **Add / Edit / Delete** — full CRUD through dialog forms
 - **Water Now** — one-click watering with automatic event logging
-- **Overdue Alerts** — plants past their schedule are flagged
+- **Overdue Alerts** — plants past their schedule are flagged with pulsing red dots and card glow
 - **Care Log** — full history and insights page:
   - Summary stats: weekly/monthly activity, care streak, most pampered plant
   - Activity timeline grouped by day, filterable by plant and event type
   - Per-plant drilldown with watering count, consistency rating, and full history
   - Add free-text care notes to any plant
   - All edits (name, location, frequency, etc.) appear in the timeline
-- **Search and Filter** — filter by name, location, health, or light need
+- **Search and Filter** — sidebar controls to filter by name, location, health, or light need
 - **Export to JSON** — download your plant collection as a JSON file (EX2 small extra)
 - 10 frontend tests using mocks (no backend needed)
 
