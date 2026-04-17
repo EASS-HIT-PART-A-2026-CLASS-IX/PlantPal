@@ -51,7 +51,9 @@ cp .env.example .env                    # create your local env file
 sudo docker compose up --build          # builds both images and starts the services
 ```
 
-> **Note:** Docker commands require `sudo` on most Linux systems unless your user is in the `docker` group.
+> **Note:** Docker commands require `sudo` on most Linux systems unless your user is in the `docker` group. If you don't have docker already installed please run : 
+sudo apt update && 
+sudo apt install docker.io docker-compose-v2 -y
 
 Once running:
 
