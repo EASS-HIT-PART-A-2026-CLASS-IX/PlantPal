@@ -1,0 +1,85 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: plantpal-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: plantpal-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - CORS_ORIGINS=http://localhost:${FRONTEND_PORT:-8501}
+      - REDIS_URL=redis://redis:6379/0
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
+      - AI_SERVICE_URL=http://ai_service:8001
+      - API_BASE_URL=http://backend:8000
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-please-32-bytes-min}
+      - DEFAULT_EDITOR_USERNAME=${DEFAULT_EDITOR_USERNAME:-gardener}
+      - DEFAULT_EDITOR_PASSWORD=${DEFAULT_EDITOR_PASSWORD:-plantpal}
+    volumes:
+      - backend-data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      ai_service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  ai_service:
+    build: ./ai_service
+    container_name: plantpal-ai
+    ports:
+      - "${AI_PORT:-8001}:8001"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GOOGLE_GEMINI_MODEL=${GOOGLE_GEMINI_MODEL:-}
+
+  frontend:
+    build: ./frontend
+    container_name: plantpal-frontend
+    ports:
+      - "${FRONTEND_PORT:-8501}:8501"
+    environment:
+      - API_URL=http://backend:8000
+      - DEFAULT_EDITOR_USERNAME=${DEFAULT_EDITOR_USERNAME:-gardener}
+      - DEFAULT_EDITOR_PASSWORD=${DEFAULT_EDITOR_PASSWORD:-plantpal}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    container_name: plantpal-worker
+    command: >
+      sh -c "until python -c 'import urllib.request,sys; urllib.request.urlopen(\"http://backend:8000/health\")' 2>/dev/null; do echo waiting-for-backend; sleep 2; done;
+             while true; do
+               uv run python /workspace/scripts/refresh.py --limit 50 --api-url http://backend:8000 || true;
+               sleep 300;
+             done"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - API_BASE_URL=http://backend:8000
+      - API_URL=http://backend:8000
+    volumes:
+      - ./scripts:/workspace/scripts:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  backend-data:

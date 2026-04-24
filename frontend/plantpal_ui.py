@@ -1,11 +1,25 @@
 import json
 import math
+import os
 from datetime import datetime, timezone
 
+import requests
 import streamlit as st
 
 import plant_api
 import cached_api
+
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+
+
+def get_advice(plant_id: int) -> dict | None:
+    try:
+        resp = requests.get(f"{API_URL}/plants/{plant_id}/advice", timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -28,6 +42,10 @@ def load_css():
 
 
 load_css()
+
+# Ensure we have an editor token before any button is pressed.
+# Stores result in st.session_state so it survives across reruns.
+plant_api.ensure_token()
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -384,7 +402,7 @@ else:
                         unsafe_allow_html=True,
                     )
 
-                    b1, b2, b3 = st.columns(3)
+                    b1, b2, b3, b4 = st.columns(4)
                     with b1:
                         if st.button("💧", key=f"water_{plant['id']}", help="Water now"):
                             plant_api.patch_plant(
@@ -401,6 +419,18 @@ else:
                         if st.button("🗑️", key=f"del_{plant['id']}", help="Delete"):
                             st.session_state[f"confirm_del_{plant['id']}"] = True
                             st.rerun()
+                    with b4:
+                        if st.button("🤖", key=f"ai_{plant['id']}", help="AI care advice"):
+                            advice = get_advice(plant["id"])
+                            st.session_state[f"advice_{plant['id']}"] = advice
+
+                    if st.session_state.get(f"advice_{plant['id']}"):
+                        adv = st.session_state[f"advice_{plant['id']}"]
+                        with st.expander("🤖 AI Advice", expanded=True):
+                            st.caption(adv.get("summary", ""))
+                            for tip in adv.get("tips", []):
+                                st.markdown(f"- {tip}")
+                            st.caption(f"Source: {adv.get('source', 'unknown')}")
 
         # Dialogs for plants in this row
         for j in range(3):

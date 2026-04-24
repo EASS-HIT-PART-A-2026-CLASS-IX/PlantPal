@@ -46,6 +46,7 @@ class TestPlantWorkflow:
         with (
             patch("plant_api.requests.post") as mock_post,
             patch("plant_api.requests.get") as mock_get,
+            patch("plant_api.ensure_token", return_value="fake-token"),
         ):
             mock_post.return_value.status_code = 200
             mock_post.return_value.json.return_value = SAMPLE_PLANT

@@ -12,8 +12,26 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 API = os.getenv("API_URL", "http://localhost:8000")
+_USERNAME = os.getenv("DEFAULT_EDITOR_USERNAME", "gardener")
+_PASSWORD = os.getenv("DEFAULT_EDITOR_PASSWORD", "plantpal")
 
 now = datetime.now(timezone.utc)
+
+
+def _get_token() -> dict:
+    """Obtain an editor JWT, fall back to empty headers if auth isn't up yet."""
+    try:
+        resp = httpx.post(
+            f"{API}/token",
+            data={"username": _USERNAME, "password": _PASSWORD},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    except Exception:
+        pass
+    return {}
 
 
 def _iso(dt: datetime) -> str:
@@ -219,6 +237,8 @@ def main() -> None:
     Events are sorted chronologically before insertion so the Care Log
     timeline renders in the expected order.
     """
+    auth_headers = _get_token()
+
     existing = httpx.get(f"{API}/plants/").json()
     if existing:
         print(f"Database already has {len(existing)} plants, skipping seed.")
@@ -227,7 +247,7 @@ def main() -> None:
     # ── Create plants ─────────────────────────────────────────────────
     plant_ids: dict[str, int] = {}
     for plant in PLANTS:
-        resp = httpx.post(f"{API}/plants/", json=plant)
+        resp = httpx.post(f"{API}/plants/", json=plant, headers=auth_headers)
         resp.raise_for_status()
         created = resp.json()
         plant_ids[plant["name"]] = created["id"]

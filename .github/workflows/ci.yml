@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync
+
+      - name: Run backend tests with coverage
+        working-directory: backend
+        env:
+          REDIS_URL: redis://localhost:6379/0
+        run: uv run pytest --cov=app --cov-report=term-missing
+
+      - name: Run CLI + refresh tests
+        working-directory: ${{ github.workspace }}
+        env:
+          REDIS_URL: redis://localhost:6379/0
+        run: backend/.venv/bin/python -m pytest scripts/tests/ -v
+
+      - name: Start API for contract check
+        working-directory: backend
+        run: |
+          uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          echo $! > api.pid
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            curl -sf http://localhost:8000/health && break || sleep 1;
+          done
+
+      - name: Schemathesis contract dry-run
+        working-directory: backend
+        continue-on-error: true
+        run: |
+          uv pip install schemathesis
+          uv run schemathesis run http://localhost:8000/openapi.json \
+            --checks status_code_conformance --dry-run || true
+
+      - name: Stop API
+        working-directory: backend
+        if: always()
+        run: kill $(cat api.pid) || true
+
+  ai_service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install AI service dependencies
+        working-directory: ai_service
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run AI service tests
+        working-directory: ai_service
+        run: pytest tests/ -v
