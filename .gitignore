@@ -7,8 +7,6 @@ build/
 .venv/
 venv/
 
-# uv
-uv.lock
 
 # SQLite database files
 *.db

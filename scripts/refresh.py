@@ -31,11 +31,16 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-# Allow running from repo root (scripts/refresh.py) or from inside the
-# backend container (/app where app.* is already importable).
+# Allow running from three locations:
+#   - repo root:            scripts/refresh.py  → ../backend contains app/
+#   - backend container:    /app is WORKDIR, app/ is already on sys.path via uv
+#   - worker container:     script mounted at /workspace/scripts, backend at /app
 _repo_backend = Path(__file__).resolve().parent.parent / "backend"
-if _repo_backend.exists():
-    sys.path.insert(0, str(_repo_backend))
+_container_app = Path("/app")
+for _candidate in (_repo_backend, _container_app):
+    if (_candidate / "app").exists() and str(_candidate) not in sys.path:
+        sys.path.insert(0, str(_candidate))
+        break
 
 from app.cache import idempotency_check_and_set  # noqa: E402
 from app.config import get_settings  # noqa: E402
