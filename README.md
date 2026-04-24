@@ -11,18 +11,19 @@ and let a background worker keep health statuses fresh automatically.
 
 1. [Prerequisites](#prerequisites)
 2. [Quick start — Docker Compose (recommended)](#quick-start--docker-compose-recommended)
-3. [Quick start — no Docker (manual)](#quick-start--no-docker-manual)
-4. [Seed sample data](#seed-sample-data)
-5. [Using the Streamlit dashboard](#using-the-streamlit-dashboard)
-6. [Using the Typer CLI](#using-the-typer-cli)
-7. [AI advice — rule-based vs Google Gemini](#ai-advice--rule-based-vs-google-gemini)
-8. [Running the async refresher](#running-the-async-refresher)
-9. [Authentication](#authentication)
-10. [Running tests](#running-tests)
-11. [API reference](#api-reference)
-12. [Environment variables](#environment-variables)
-13. [Project structure](#project-structure)
-14. [AI Assistance](#ai-assistance)
+3. [End-to-end demo script](#end-to-end-demo-script)
+4. [Quick start — no Docker (manual)](#quick-start--no-docker-manual)
+5. [Seed sample data](#seed-sample-data)
+6. [Using the Streamlit dashboard](#using-the-streamlit-dashboard)
+7. [Using the Typer CLI](#using-the-typer-cli)
+8. [AI advice — rule-based vs Google Gemini](#ai-advice--rule-based-vs-google-gemini)
+9. [Running the async refresher](#running-the-async-refresher)
+10. [Authentication](#authentication)
+11. [Running tests](#running-tests)
+12. [API reference](#api-reference)
+13. [Environment variables](#environment-variables)
+14. [Project structure](#project-structure)
+15. [AI Assistance](#ai-assistance)
 
 ---
 
@@ -90,6 +91,39 @@ It is **idempotent** — safe to run again, it skips if data already exists.
 ```bash
 sudo docker compose -f compose.yaml down         # stop, keep data volume
 sudo docker compose -f compose.yaml down -v      # stop and delete data
+```
+
+---
+
+## End-to-end demo script
+
+`scripts/demo.sh` walks through all seven steps in one command and is
+the fastest way to verify the full EX3 stack. Requires: Docker, `python3`,
+`curl`.
+
+```bash
+bash scripts/demo.sh
+```
+
+What it does:
+
+| Step | Action |
+|------|--------|
+| 1/7 | Builds and starts the full Compose stack (backend · frontend · ai_service · redis · worker) |
+| 2/7 | Polls `GET /health` until the backend is ready (up to 60 s) |
+| 3/7 | Seeds sample plants via `compose exec backend` (idempotent) |
+| 4/7 | Lists plants via `curl GET /plants/` |
+| 5/7 | Fetches AI advice for plant #1 (`GET /plants/1/advice`) |
+| 6/7 | Creates a host-side venv (`scripts/.venv`) with `httpx` + `typer`, logs in, and exports all plants to `plants_export.csv` via the Typer CLI |
+| 7/7 | Fires a one-shot health refresh using `compose run --rm worker` — the same image, network, and script mount the long-running worker uses |
+
+Re-run safe. Override defaults with environment variables:
+
+```bash
+API_URL=http://localhost:9000 \
+DEFAULT_EDITOR_USERNAME=admin \
+DEFAULT_EDITOR_PASSWORD=secret \
+bash scripts/demo.sh
 ```
 
 ---
@@ -196,29 +230,34 @@ The dashboard is the primary EX2 interface. After seeding you will see:
 ## Using the Typer CLI
 
 The CLI (`scripts/plantpal_cli.py`) is the EX2 Typer interface and also
-provides the EX3 CSV enhancement. It talks to the same backend API.
+provides the EX3 CSV enhancement. It is a pure HTTP client that talks to
+the backend API over `http://localhost:8000` — no backend code is imported.
 
-### Setup (no Docker)
+### Setup
 
-The CLI uses the backend's virtual environment:
+The CLI requires its own lightweight venv with `httpx` and `typer`.
+Create it once from the repo root:
 
 ```bash
-cd /path/to/PlantPal         # repo root
-# backend venv must exist (uv sync inside backend/ creates it)
+python3 -m venv scripts/.venv
+scripts/.venv/bin/pip install httpx typer
 ```
+
+> The end-to-end demo script (`scripts/demo.sh`) creates and populates
+> this venv automatically — you only need to do this for standalone use.
 
 ### Commands
 
 **List all plants:**
 
 ```bash
-python scripts/plantpal_cli.py list-plants
+scripts/.venv/bin/python scripts/plantpal_cli.py list-plants
 ```
 
 **Log in and get a JWT:**
 
 ```bash
-TOKEN=$(python scripts/plantpal_cli.py login \
+TOKEN=$(scripts/.venv/bin/python scripts/plantpal_cli.py login \
   --username gardener --password plantpal)
 echo $TOKEN
 ```
@@ -226,7 +265,7 @@ echo $TOKEN
 **Add a plant (requires editor token):**
 
 ```bash
-PLANTPAL_TOKEN=$TOKEN python scripts/plantpal_cli.py add-plant \
+PLANTPAL_TOKEN=$TOKEN scripts/.venv/bin/python scripts/plantpal_cli.py add-plant \
   --name "Spider Plant" --species "Chlorophytum comosum" \
   --location "Office" --frequency 120
 ```
@@ -234,25 +273,25 @@ PLANTPAL_TOKEN=$TOKEN python scripts/plantpal_cli.py add-plant \
 **Export the catalog to CSV:**
 
 ```bash
-python scripts/plantpal_cli.py export-csv --output plants.csv
+scripts/.venv/bin/python scripts/plantpal_cli.py export-csv --output plants.csv
 ```
 
 **Import plants from a CSV file (requires editor token):**
 
 ```bash
-PLANTPAL_TOKEN=$TOKEN python scripts/plantpal_cli.py import-csv plants.csv
+PLANTPAL_TOKEN=$TOKEN scripts/.venv/bin/python scripts/plantpal_cli.py import-csv plants.csv
 ```
 
 **Get AI advice for plant ID 1:**
 
 ```bash
-python scripts/plantpal_cli.py advice 1
+scripts/.venv/bin/python scripts/plantpal_cli.py advice 1
 ```
 
 **Point at a non-default backend URL:**
 
 ```bash
-python scripts/plantpal_cli.py list-plants --api-url http://localhost:9000
+scripts/.venv/bin/python scripts/plantpal_cli.py list-plants --api-url http://localhost:9000
 ```
 
 ---
@@ -339,22 +378,26 @@ The refresher (`scripts/refresh.py`) re-evaluates the health status for
 every plant in the background using bounded async concurrency and Redis
 idempotency keys so it never processes the same plant twice in one day.
 
-```bash
-# Refresh up to 10 plants (default)
-python scripts/refresh.py --limit 10
+### Automatic (Docker Compose)
 
-# Refresh all 50, point at a custom backend
-python scripts/refresh.py --limit 50 --api-url http://localhost:8000
+When the stack is up the `worker` service runs the refresher in a loop
+every 5 minutes automatically — no action needed.
+
+### Manual one-shot run
+
+Use `compose run --rm` to fire a single run with the same image, network,
+and volume mount that the worker uses:
+
+```bash
+sudo docker compose -f compose.yaml run --rm \
+  -e REDIS_URL=redis://redis:6379/0 \
+  -e API_URL=http://backend:8000 \
+  worker \
+  uv run python /workspace/scripts/refresh.py --limit 10 --api-url http://backend:8000
 ```
 
-**With Docker Compose** the worker service runs this loop automatically
-every 5 minutes. You can also trigger it manually:
-
-```bash
-sudo docker compose -f compose.yaml exec worker \
-  uv run python /workspace/scripts/refresh.py --limit 50 \
-  --api-url http://backend:8000
-```
+> Note: the URL must be `http://backend:8000` (internal Docker network name),
+> not `localhost`, because the command runs inside a container.
 
 **Expected log output** (first run — all processed):
 
